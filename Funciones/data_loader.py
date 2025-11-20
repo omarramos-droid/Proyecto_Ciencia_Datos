@@ -79,11 +79,11 @@ def filter_data_quality(df):
     
     # Criterios de calidad para variables importantes
     quality_criteria = {
-        'age': {'min': 29, 'max': 77},
+        'age': {'min': 10, 'max': 90},
         'sex': {'values': [0, 1]},
         'cp': {'values': [1, 2, 3, 4]},
         'trestbps': {'min': 80, 'max': 200},
-        'chol': {'min': 50, 'max': 600},
+        'chol': {'min': 30, 'max': 600},
         'fbs': {'values': [0, 1]},
         'restecg': {'values': [0, 1, 2]},
         'thalach': {'min': 60, 'max': 220},
@@ -207,7 +207,8 @@ def save_processed_data(df, filename="cleveland_clean.csv"):
 
 def main_data():
     """
-    Función principal que ejecuta todo el pipeline
+    Función principal para cargar los datos y filtrar por criterior , seleccion de columnas
+    Y la imputación de valores mediantes criterios individuales
     """
     # 1. Cargar datos crudos
     df_raw = load_cleveland_data()
