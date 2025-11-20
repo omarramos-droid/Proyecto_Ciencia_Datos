@@ -1,25 +1,16 @@
 import pandas as pd
-import os
+import numpy as np
 from pathlib import Path
 
-def load_heart_disease_data(data_dir=None):
+def load_cleveland_data():
     """
-    Carga y combina todos los datasets de heart disease
-    
-    Parameters:
-    data_dir (str): Directorio donde están los archivos .data
-    
-    Returns:
-    pd.DataFrame: DataFrame combinado con todos los datos
+    Carga los datos crudos del dataset de Cleveland
     """
+    # Configurar rutas de archivos
+    current_dir = Path(__file__).parent
+    data_dir = current_dir.parent / "Data" / "heart+disease"
     
-    # Si no se especifica directorio, usar el predeterminado
-    if data_dir is None:
-        data_dir = Path("C:/Users/dell/Desktop/Proyecto_Ciencia_Datos/Data/heart+disease/")
-    else:
-        data_dir = Path(data_dir)
-    
-    # Nombres de las columnas (definidos por el repositorio UCI)
+    # Nombres de todas las columnas según la documentación
     column_names = [
         "id", "ccf", "age", "sex", "painloc", "painexer", "relrest", "pncaden",
         "cp", "trestbps", "htn", "chol", "smoke", "cigs", "years", "fbs", "dm", "famhist",
@@ -32,152 +23,205 @@ def load_heart_disease_data(data_dir=None):
         "rcadist", "lvx1", "lvx2", "lvx3", "lvx4", "lvf", "cathef", "junk", "name"
     ]
     
-    # Archivos a cargar
-    data_files = {
-        'cleveland': 'cleveland.data',
-        'hungarian': 'hungarian.data', 
-        'long-beach': 'long-beach-va.data',
-        'switzerland': 'switzerland.data'
-    }
+
     
-    dataframes = []
+    file_path = data_dir / 'cleveland.data'
     
-    for dataset_name, filename in data_files.items():
-        file_path = data_dir / filename
-        
-        if not file_path.exists():
-            print(f"Advertencia: No se encontró {file_path}")
-            continue
-            
-        print(f"Cargando {dataset_name}...")
-        
-        try:
-            # Leer todos los tokens del archivo
+    try:
+        # Leer y tokenizar el archivo
+        with open(file_path, 'r') as f:
             tokens = []
-            with open(file_path, 'r') as f:
-                for line in f:
-                    # Limpiar y dividir la línea
-                    cleaned_line = line.strip()
-                    if cleaned_line:
-                        tokens.extend(cleaned_line.split())
-            
-            # Agrupar tokens en registros (cada registro tiene 76 columnas)
-            records = []
-            current_record = []
-            
-            for token in tokens:
-                current_record.append(token)
-                if len(current_record) == 76:
-                    records.append(current_record)
-                    current_record = []
-            
-            # Crear DataFrame
-            if records:
-                df_temp = pd.DataFrame(records, columns=column_names)
-                df_temp['dataset'] = dataset_name  # Agregar columna para identificar el origen
-                dataframes.append(df_temp)
-                print(f"  {len(df_temp)} registros cargados")
-            else:
-                print(f"  No se pudieron procesar registros para {dataset_name}")
-                
-        except Exception as e:
-            print(f"Error cargando {dataset_name}: {e}")
-    
-    # Combinar todos los DataFrames
-    if dataframes:
-        df_combined = pd.concat(dataframes, ignore_index=True)
-        print(f"\nTotal de registros combinados: {len(df_combined)}")
+            for line in f:
+                clean_line = line.strip()
+                if clean_line:
+                    tokens.extend(clean_line.split())
         
-        # Procesamiento de datos
-        df_processed = preprocess_data(df_combined)
-        return df_processed
-    else:
-        print("Error: No se pudieron cargar datos de ningún archivo")
+        # Agrupar tokens en registros de 76 columnas
+        records = []
+        current_record = []
+        
+        for token in tokens:
+            current_record.append(token)
+            if len(current_record) == 76:
+                records.append(current_record)
+                current_record = []
+        
+        if records:
+            df = pd.DataFrame(records, columns=column_names)
+            df['dataset'] = 'cleveland'
+            print(f"{len(df)} registros cargados exitosamente")
+            return df
+        else:
+            print("✗ No se encontraron registros válidos")
+            return pd.DataFrame()
+            
+    except Exception as e:
+        print(f"✗ Error en lectura: {e}")
         return pd.DataFrame()
 
-def preprocess_data(df):
+def filter_data_quality(df):
     """
-    Preprocesa los datos: convierte a numérico y maneja valores missing
-    
-    Parameters:
-    df (pd.DataFrame): DataFrame raw combinado
-    
-    Returns:
-    pd.DataFrame: DataFrame procesado
+    Filtra los datos aplicando criterios de intervalos
     """
-    print("\nPreprocesando datos...")
-    
-    # Hacer una copia para no modificar el original
-    df_processed = df.copy()
-    
-    # Convertir columnas a numérico (excepto 'name' y 'dataset')
-    non_numeric_cols = ['name', 'dataset']
-    numeric_cols = [col for col in df_processed.columns if col not in non_numeric_cols]
-    
-    for col in numeric_cols:
-        df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce')
-        # Reemplazar -9 (valor que indica missing en estos datasets) por NaN
-        df_processed[col] = df_processed[col].replace(-9, pd.NA)
-    
-    print("Conversión a numérico completada")
-    return df_processed
 
-def get_model_data(df, include_extra=False):
+    
+    df_clean = df.copy()
+    initial_rows = len(df_clean)
+    
+    # Convertir columnas a numéricas (maneja '?' como NaN)
+    numeric_columns = [col for col in df_clean.columns if col not in ['dataset', 'name']]
+    
+    for col in numeric_columns:
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+    
+    # Reemplazar valores missing (-9) con NaN
+    df_clean = df_clean.replace(-9, np.nan)
+    
+    # Criterios de calidad para variables importantes
+    quality_criteria = {
+        'age': {'min': 29, 'max': 77},
+        'sex': {'values': [0, 1]},
+        'cp': {'values': [1, 2, 3, 4]},
+        'trestbps': {'min': 80, 'max': 200},
+        'chol': {'min': 50, 'max': 600},
+        'fbs': {'values': [0, 1]},
+        'restecg': {'values': [0, 1, 2]},
+        'thalach': {'min': 60, 'max': 220},
+        'exang': {'values': [0, 1]},
+        'oldpeak': {'min': 0, 'max': 6.2},
+        'slope': {'values': [1, 2, 3]},
+        'ca': {'values': [0, 1, 2, 3]},
+        'thal': {'values': [3, 6, 7]},
+        'num': {'values': [0, 1, 2, 3, 4]}
+    }
+    
+    # Aplicar filtros de calidad
+    valid_mask = pd.Series([True] * len(df_clean))
+    
+    for col, criteria in quality_criteria.items():
+        if col in df_clean.columns:
+            col_mask = pd.Series([True] * len(df_clean))
+            
+            if 'values' in criteria:
+                col_mask = df_clean[col].isin(criteria['values']) | df_clean[col].isna()
+            elif 'min' in criteria and 'max' in criteria:
+                col_mask = ((df_clean[col] >= criteria['min']) & 
+                           (df_clean[col] <= criteria['max'])) | df_clean[col].isna()
+            
+            invalid_count = (~col_mask).sum()
+            # if invalid_count > 0:
+            #     print(f"   {col}: {invalid_count} valores fuera de rango eliminados")
+            
+            valid_mask = valid_mask & col_mask
+    
+    # Aplicar filtro final
+    df_filtered = df_clean[valid_mask].copy()
+    
+
+    return df_filtered
+
+def select_relevant_columns(df):
     """
-    Extrae las columnas relevantes para el modelo
-    
-    Parameters:
-    df (pd.DataFrame): DataFrame procesado
-    include_extra (bool): Si incluir columnas adicionales
-    
-    Returns:
-    pd.DataFrame: DataFrame con columnas para el modelo
+    Selecciona las columnas más relevantes basado en datos faltantes e importancia clínica
     """
+  
     
-    # Columnas base (las más comunes en la literatura)
-    cols_base = [
-        "age", "sex", "cp", "trestbps", "chol", "fbs", "restecg",
-        "thalach", "exang", "oldpeak", "slope", "ca", "thal", "num"
+    # Columnas esenciales - las 14 variables principales
+    essential_columns = [
+        'age', 'sex', 'cp', 'trestbps', 'chol', 'fbs', 'restecg', 
+        'thalach', 'exang', 'oldpeak', 'slope', 'ca', 'thal', 'num'
     ]
     
-    # Columnas adicionales (opcionales)
-    cols_extra = ["smoke", "cigs", "years", "famhist", "dataset"]
+    # Columnas a eliminar definitivamente
+    columns_to_drop = [
+        'thalsev', 'thalpul', 'earlobe', 'restckm', 'exerckm',
+        'lvx1', 'lvx2', 'lvx3', 'lvx4', 'lvf', 'cathef', 'junk',
+        'id', 'ccf', 'name', 'ekgmo', 'ekgday', 'ekgyr', 
+        'cmo', 'cday', 'cyr', 'dummy', 'smoke', 'cigs'  # smoke y cigs eliminadas
+    ]
+
+    # Columnas adicionales para evaluar
+    columns_to_evaluate = ['htn', 'years', 'dm', 'famhist', 'thalrest']
     
-    # Verificar qué columnas existen
-    if include_extra:
-        cols_final = [c for c in (cols_base + cols_extra) if c in df.columns]
-    else:
-        cols_final = [c for c in cols_base if c in df.columns]
+    # Evaluar columnas adicionales basado en datos faltantes
+    columns_to_keep = []
     
-    # Eliminar columnas que estén completamente vacías
-    cols_final = [col for col in cols_final if not df[col].isna().all()]
+    for col in columns_to_evaluate:
+        if col in df.columns:
+            missing_pct = (df[col].isna().sum() / len(df)) * 100
+            if missing_pct <= 10:
+                columns_to_keep.append(col)
+    
+    # Combinar todas las columnas a mantener
+    final_columns = essential_columns + columns_to_keep + ['dataset']
+    final_columns = list(set(final_columns) & set(df.columns))
     
     # Crear DataFrame final
-    df_model = df[cols_final].copy()
+    df_final = df[final_columns].copy()
     
-    print(f"Columnas finales del modelo: {df_model.columns.tolist()}")
-    print(f"\nNAs por columna:")
-    print(df_model.isna().sum())
-    
-    return df_model
+    return df_final
 
-# Función principal para testing
-if __name__ == "__main__":
-    # Cargar datos
-    df = load_heart_disease_data()
+def impute_missing_values(df):
+    """
+    Imputa los valores faltantes usando estrategias específicas
+    """
+
     
-    if not df.empty:
-        print(f"\nDataset cargado: {len(df)} registros")
-        print(f"Columnas: {df.columns.tolist()}")
-        
-        # Obtener datos para modelo
-        df_model = get_model_data(df, include_extra=True)
-        print(f"\nPrimeras filas del dataset del modelo:")
-        print(df_model.head())
-        
-        # Información sobre los datasets
-        print(f"\nDistribución por dataset:")
-        if 'dataset' in df.columns:
-            print(df['dataset'].value_counts())
-    else:
-        print("No se pudieron cargar los datos")
+    df_imputed = df.copy()
+    
+    # print("Valores faltantes antes de la imputación:")
+    missing_before = df_imputed.isna().sum()
+    # print(missing_before[missing_before > 0])
+    
+    # Estrategia de imputación
+    # Variables categóricas: imputar por moda
+    if 'ca' in df_imputed.columns:
+        ca_mode = df_imputed['ca'].mode()[0]
+        df_imputed['ca'].fillna(ca_mode, inplace=True)
+        # print(f"   ca: 2 valores imputados con moda ({ca_mode})")
+    
+    if 'thal' in df_imputed.columns:
+        thal_mode = df_imputed['thal'].mode()[0]
+        df_imputed['thal'].fillna(thal_mode, inplace=True)
+        # print(f"   thal: 2 valores imputados con moda ({thal_mode})")
+    
+    # Imputar con 0
+    if 'years' in df_imputed.columns:
+        df_imputed['years'].fillna(0, inplace=True)
+        # print(f"   years: 5 valores imputados con 0 años)")
+    
+    # Verificación
+    missing_after = df_imputed.isna().sum().sum()
+    # print(f" Valores faltantes restantes: {missing_after}")
+    
+    return df_imputed
+
+
+def save_processed_data(df, filename="cleveland_clean.csv"):
+    """
+    Guarda el DataFrame procesado
+    """
+    output_path = Path(__file__).parent / filename
+    df.to_csv(output_path, index=False)
+    return output_path
+
+def main_data():
+    """
+    Función principal que ejecuta todo el pipeline
+    """
+    # 1. Cargar datos crudos
+    df_raw = load_cleveland_data()
+ 
+    
+    # 2. Filtrar por calidad clínica
+    df_filtered = filter_data_quality(df_raw)
+    
+    # 3. Seleccionar columnas relevantes
+    df_selected = select_relevant_columns(df_filtered)
+    
+    # 4. Imputar valores faltantes
+    df_imputed = impute_missing_values(df_selected)
+    
+
+    return df_imputed
+

@@ -1,43 +1,31 @@
-from Funciones.data_loader import load_heart_disease_data, get_model_data
+from Funciones.data_loader import *
 import pandas as pd
 
 def main():
     """
-    Función principal del proyecto de ciencia de datos
+    Función principal que usa el módulo de procesamiento
     """
-    print("=== PROYECTO CIENCIA DE DATOS - ENFERMEDAD CARDÍACA ===\n")
+    # 1. Obtener datos procesados
+    print("Cargando y procesando datos de Cleveland...")
+    df = get_cleveland_data()
     
-    # 1. Cargar datos
-    print("1. Cargando datos...")
-    df = load_heart_disease_data()
+    # 2. Ver información del dataset
+    info = get_data_info(df)
+    print(f"\nDataset procesado:")
+    print(f"- Filas: {info['filas']}")
+    print(f"- Columnas: {info['columnas']}")
+    print(f"- Columnas: {info['columnas_lista']}")
     
-    if df.empty:
-        print("Error: No se pudieron cargar los datos")
-        return
+    # 3. Guardar datos procesados (opcional)
+    output_path = save_processed_data(df, "mi_dataset_cleveland.csv")
+    print(f"\nDatos guardados en: {output_path}")
     
-    print(f"Datos cargados exitosamente: {len(df)} registros\n")
+    # 4. Aquí puedes continuar con tu análisis...
+    # Ejemplo: análisis exploratorio, entrenamiento de modelos, etc.
+    print("\nDataset listo para análisis!")
     
-    # 2. Preparar datos para el modelo
-    print("2. Preparando datos para el modelo...")
-    df_model = get_model_data(df, include_extra=True)
-    
-    # 3. Mostrar información general
-    print("\n3. Información del dataset:")
-    print(f"   - Total de registros: {len(df_model)}")
-    print(f"   - Total de características: {len(df_model.columns)}")
-    print(f"   - Columnas: {df_model.columns.tolist()}")
-    
-    # 4. Información sobre la variable objetivo 'num'
-    if 'num' in df_model.columns:
-        print(f"\n4. Distribución de la variable objetivo 'num':")
-        print(df_model['num'].value_counts().sort_index())
-    
-    # 5. Información sobre datasets si está disponible
-    if 'dataset' in df_model.columns:
-        print(f"\n5. Distribución por dataset origen:")
-        print(df_model['dataset'].value_counts())
-    
-    print("\n=== PROCESO COMPLETADO ===")
+    return df
 
 if __name__ == "__main__":
-    main()
+    data = main()
+    data['num'].value_counts()
