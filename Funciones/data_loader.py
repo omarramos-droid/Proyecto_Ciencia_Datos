@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-
+import matplotlib.pyplot as plt
 def load_cleveland_data():
     """
     Carga los datos crudos del dataset de Cleveland
@@ -216,3 +216,45 @@ def main_data():
 
     return df_imputed
 
+def visualizar_outliers(df):
+    """
+    Visualización de outliers usando boxplots y scatter plots
+    """
+    # Boxplots para variables numéricas
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    axes = axes.ravel()
+    
+    numeric_cols = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak', 'ca']
+    
+    for i, col in enumerate(numeric_cols[:6]):
+        if col in df.columns:
+            df.boxplot(column=col, ax=axes[i])
+            axes[i].set_title(f'Boxplot de {col}')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Scatter plots para relaciones clave
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    
+    # Colesterol vs Edad
+    axes[0].scatter(df['age'], df['chol'], alpha=0.6)
+    axes[0].set_xlabel('Edad')
+    axes[0].set_ylabel('Colesterol')
+    axes[0].set_title('Colesterol vs Edad')
+    
+    # Presión arterial vs Frecuencia cardíaca máxima
+    axes[1].scatter(df['trestbps'], df['thalach'], alpha=0.6)
+    axes[1].set_xlabel('Presión Arterial en Reposo')
+    axes[1].set_ylabel('Frecuencia Cardíaca Máxima')
+    axes[1].set_title('Presión vs Frecuencia Cardíaca')
+    
+    plt.tight_layout()
+    plt.show()
+
+# data=main_data()
+
+# visualizar_outliers(data)
+# Función principal 
+if __name__ == "__main__":
+    df_cleveland = main_data()
