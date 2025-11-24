@@ -6,11 +6,12 @@ def load_cleveland_data():
     """
     Carga los datos crudos del dataset de Cleveland
     """
+    
     # Configurar rutas de archivos
     current_dir = Path(__file__).parent
     data_dir = current_dir.parent / "Data" / "heart+disease"
     
-    # Nombres de todas las columnas según la documentación
+    # Nombres de todas las columnas
     column_names = [
         "id", "ccf", "age", "sex", "painloc", "painexer", "relrest", "pncaden",
         "cp", "trestbps", "htn", "chol", "smoke", "cigs", "years", "fbs", "dm", "famhist",
@@ -23,42 +24,36 @@ def load_cleveland_data():
         "rcadist", "lvx1", "lvx2", "lvx3", "lvx4", "lvf", "cathef", "junk", "name"
     ]
     
-
-    
     file_path = data_dir / 'cleveland.data'
     
-    try:
-        # Leer y tokenizar el archivo
-        with open(file_path, 'r') as f:
-            tokens = []
-            for line in f:
-                clean_line = line.strip()
-                if clean_line:
-                    tokens.extend(clean_line.split())
-        
-        # Agrupar tokens en registros de 76 columnas
-        records = []
-        current_record = []
-        
-        for token in tokens:
-            current_record.append(token)
-            if len(current_record) == 76:
-                records.append(current_record)
-                current_record = []
-        
-        if records:
-            df = pd.DataFrame(records, columns=column_names)
-            df['dataset'] = 'cleveland'
-            print(f"{len(df)} registros cargados exitosamente")
-            return df
-        else:
-            print("✗ No se encontraron registros válidos")
-            return pd.DataFrame()
-            
-    except Exception as e:
-        print(f"✗ Error en lectura: {e}")
-        return pd.DataFrame()
-
+    # Leer el archivo
+    with open(file_path, 'r') as archivo:
+        lineas = archivo.readlines()
+    
+    # Procesar todas las líneas
+    todos = []
+    for linea in lineas:
+        linea_limpia = linea.strip()
+        if linea_limpia:
+            tokens_linea = linea_limpia.split()
+            todos.extend(tokens_linea)
+    
+    # Crear registros de 76 columnas
+    registros = []
+    registro_actual = []
+    
+    for token in todos:
+        registro_actual.append(token)
+        if len(registro_actual) == 76:
+            registros.append(registro_actual)
+            registro_actual = []
+    
+    # Crear DataFrame
+    df = pd.DataFrame(registros, columns=column_names)
+    df['dataset'] = 'cleveland'
+    
+    print(f"{len(df)} registros cargados exitosamente")
+    return df
 def filter_data_quality(df):
     """
     Filtra los datos aplicando criterios de intervalos
@@ -165,7 +160,6 @@ def impute_missing_values(df):
     """
     Imputa los valores faltantes usando estrategias específicas
     """
-
     
     df_imputed = df.copy()
     
@@ -175,27 +169,23 @@ def impute_missing_values(df):
     
     # Estrategia de imputación
     # Variables categóricas: imputar por moda
-    if 'ca' in df_imputed.columns:
-        ca_mode = df_imputed['ca'].mode()[0]
-        df_imputed['ca'].fillna(ca_mode, inplace=True)
-        # print(f"   ca: 2 valores imputados con moda ({ca_mode})")
+    ca_mode = df_imputed['ca'].mode()
+    df_imputed['ca'] = df_imputed['ca'].fillna(ca_mode.iloc[0])
+    # print(f"   ca: 2 valores imputados con moda ({ca_mode.iloc[0]})")
     
-    if 'thal' in df_imputed.columns:
-        thal_mode = df_imputed['thal'].mode()[0]
-        df_imputed['thal'].fillna(thal_mode, inplace=True)
-        # print(f"   thal: 2 valores imputados con moda ({thal_mode})")
+    thal_mode = df_imputed['thal'].mode()
+    df_imputed['thal'] = df_imputed['thal'].fillna(thal_mode.iloc[0])
+    # print(f"   thal: 2 valores imputados con moda ({thal_mode.iloc[0]})")
     
     # Imputar con 0
-    if 'years' in df_imputed.columns:
-        df_imputed['years'].fillna(0, inplace=True)
-        # print(f"   years: 5 valores imputados con 0 años)")
+    df_imputed['years'] = df_imputed['years'].fillna(0)
+    # print(f"   years: 5 valores imputados con 0 años)")
     
     # Verificación
     missing_after = df_imputed.isna().sum().sum()
     # print(f" Valores faltantes restantes: {missing_after}")
     
     return df_imputed
-
 
 def save_processed_data(df, filename="cleveland_clean.csv"):
     """
