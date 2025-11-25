@@ -150,7 +150,7 @@ def FisherLinearDiscriminant(df, target_col='num', binary_threshold=0):
     plt.figure(figsize=(15, 5))
     
     # Gráfico 1: Matriz de confusión
-    plt.subplot(1, 3, 1)
+    plt.subplot(1, 2, 1)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=['Sin Enfermedad', 'Con Enfermedad'],
                 yticklabels=['Sin Enfermedad', 'Con Enfermedad'])
@@ -159,7 +159,7 @@ def FisherLinearDiscriminant(df, target_col='num', binary_threshold=0):
     plt.xlabel('Predicción')
     
     # Gráfico 2: Distribución de scores LDA por clase
-    plt.subplot(1, 3, 2)
+    plt.subplot(1, 2, 2)
     plt.hist(z_test[y_test == 0], bins=15, alpha=0.7, label='Sin Enfermedad', 
              color='blue', density=True)
     plt.hist(z_test[y_test == 1], bins=15, alpha=0.7, label='Con Enfermedad', 

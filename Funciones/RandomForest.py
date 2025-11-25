@@ -2,61 +2,48 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix, roc_auc_score, accuracy_score, precision_recall_curve, f1_score, precision_score, recall_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def optimizar_umbral_inteligente(y_test, y_pred_proba):
+def evaluar_umbrales_random_forest(y_test, y_pred_proba):
     """
-    Optimiza el umbral de clasificación para maximizar el F1-Score
+    Evalúa diferentes umbrales para Random Forest 
+    """
+    umbrales = np.linspace(0.1, 0.9, 50)
+    resultados = []
     
-    Parameters:
-    -----------
-    y_test : array-like
-        Valores reales del conjunto de prueba
-    y_pred_proba : array-like
-        Probabilidades predichas por el modelo (clase positiva)
+    for umbral in umbrales:
+        y_pred = y_pred_proba >= umbral
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, zero_division=0)
+        recall = recall_score(y_test, y_pred, zero_division=0)
+        f1 = f1_score(y_test, y_pred, zero_division=0)
         
-    Returns:
-    --------
-    optimal_threshold : float
-        Umbral óptimo encontrado
-    max_f1 : float
-        Valor máximo del F1-Score alcanzado
-    """
-    precisions, recalls, thresholds = precision_recall_curve(y_test, y_pred_proba)
-    f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-8)
+        resultados.append({
+            'umbral': umbral,
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1': f1
+        })
     
-    max_f1 = np.max(f1_scores)
-    optimal_indices = np.where(f1_scores == max_f1)[0]
+    df_resultados = pd.DataFrame(resultados)
     
-    best_idx = optimal_indices[0]
-    optimal_threshold = thresholds[best_idx]
+    # Encontrar mejor umbral por F1 
+    mejor_f1_idx = df_resultados['f1'].idxmax()
+    umbral_optimo = df_resultados.loc[mejor_f1_idx, 'umbral']
+    f1_optimo = df_resultados.loc[mejor_f1_idx, 'f1']
     
-    return optimal_threshold, max_f1
+     
+    return umbral_optimo, f1_optimo
+
 
 def RandomForestClasificacion(df, target_col='num', binary_threshold=0, n_estimators=100, random_state=42):
     """
-    Ejecuta Random Forest para clasificación binaria con optimización de umbral
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        Dataset completo con variables predictoras y variable objetivo
-    target_col : str, default='num'
-        Nombre de la columna objetivo en el dataset
-    binary_threshold : int, default=0
-        Umbral para binarizar la variable objetivo
-    n_estimators : int, default=100
-        Número de árboles en el Random Forest
-    random_state : int, default=42
-        Semilla para reproducibilidad
-        
-    Returns:
-    --------
-    dict : Diccionario con todos los resultados del modelo
+    Ejecuta Random Forest para clasificación binaria
     """
-   
     # 1. Preparar datos para clasificación binaria
     df_clean = df.copy()
     df_clean['target_binary'] = (df_clean[target_col] > binary_threshold).astype(int)
@@ -68,7 +55,6 @@ def RandomForestClasificacion(df, target_col='num', binary_threshold=0, n_estima
     X = df_clean[feature_cols]
     y = df_clean['target_binary']
     
-    print(f" DISTRIBUCIÓN DE CLASES:")
     print(f" Sin enfermedad (0): {(y == 0).sum()} casos")
     print(f" Con enfermedad (1): {(y == 1).sum()} casos")
     print(f" Proporción: {(y == 1).mean()*100:.1f}% con enfermedad")
@@ -90,28 +76,31 @@ def RandomForestClasificacion(df, target_col='num', binary_threshold=0, n_estima
     
     model.fit(X_train, y_train)
     
-    # 4. Predicciones y métricas base
+    # 4. Predicciones
     y_pred_proba = model.predict_proba(X_test)[:, 1]
-    auc_score = roc_auc_score(y_test, y_pred_proba)
+    y_pred_default = model.predict(X_test)  # Predicción con umbral 0.5
     
-    # 5. Optimizar umbral
-    optimal_threshold, max_f1 = optimizar_umbral_inteligente(y_test, y_pred_proba)
+    # 5. Evaluar diferentes umbrales
+    optimal_threshold, max_f1 = evaluar_umbrales_random_forest(y_test, y_pred_proba)
     
-    # Aplicar umbral recomendado
-    y_pred_final = y_pred_proba >= optimal_threshold
+    # Aplicar umbral seleccionado
+    if optimal_threshold == 0.5:
+        y_pred_final = y_pred_default
+    else:
+        y_pred_final = y_pred_proba >= optimal_threshold
     
-    # Calcular métricas completas
+    # 6. Calcular métricas completas
     accuracy_final = accuracy_score(y_test, y_pred_final)
     precision_final = precision_score(y_test, y_pred_final)
     recall_final = recall_score(y_test, y_pred_final)
+    auc_score = roc_auc_score(y_test, y_pred_proba)
     
-    # Matriz de confusión para métricas adicionales
+    # Matriz de confusión
     cm = confusion_matrix(y_test, y_pred_final)
     tn, fp, fn, tp = cm.ravel()
     sensibilidad = recall_final
     especificidad = tn / (tn + fp)
     
-    print(f"\n RESULTADOS CON UMBRAL ÓPTIMO ({optimal_threshold:.3f}):")
     print(f"   • Accuracy:    {accuracy_final:.4f}")
     print(f"   • Precision:   {precision_final:.4f}")
     print(f"   • Recall:      {recall_final:.4f}")
@@ -119,18 +108,9 @@ def RandomForestClasificacion(df, target_col='num', binary_threshold=0, n_estima
     print(f"   • Sensibilidad: {sensibilidad:.4f}")
     print(f"   • Especificidad: {especificidad:.4f}")
     print(f"   • AUC-ROC:     {auc_score:.4f}")
-    
-    # 6. Importancia de variables
-    importancia = model.feature_importances_
-    importancia_df = pd.DataFrame({
-        'Variable': feature_cols,
-        'Importancia': importancia
-    }).sort_values('Importancia', ascending=False)
-    
-    print(f"\n TOP 10 VARIABLES MÁS IMPORTANTES:")
-    print(importancia_df.head(10).to_string(index=False))
-    
-    # 7. Preparar datos para el gráfico de métricas vs umbral
+    print(f"   • Umbral usado: {optimal_threshold:.3f}")
+
+
     umbrales_prueba = np.linspace(0.1, 0.9, 50)
     sensibilidad_list = []
     especificidad_list = []
@@ -145,8 +125,8 @@ def RandomForestClasificacion(df, target_col='num', binary_threshold=0, n_estima
         especificidad_list.append(tn_temp / (tn_temp + fp_temp))
         f1_scores_list.append(f1_score(y_test, y_pred_temp))
     
-    # 8. Visualizaciones
-    plt.figure(figsize=(12, 5))
+    # 9. Visualizaciones
+    plt.figure(figsize=(15, 5))
     
     # Matriz de confusión
     plt.subplot(1, 2, 1)
@@ -157,41 +137,35 @@ def RandomForestClasificacion(df, target_col='num', binary_threshold=0, n_estima
     plt.ylabel('Valor Real')
     plt.xlabel('Predicción')
     
-    # Gráfico de métricas vs umbral
+    # Métricas vs umbral
     plt.subplot(1, 2, 2)
-    plt.plot(umbrales_prueba, sensibilidad_list, 'o-', label='Sensibilidad', linewidth=2, markersize=3)
-    plt.plot(umbrales_prueba, especificidad_list, 'o-', label='Especificidad', linewidth=2, markersize=3)
-    plt.plot(umbrales_prueba, f1_scores_list, 'o-', label='F1-Score', linewidth=2, markersize=3)
-    plt.axvline(optimal_threshold, color='red', linestyle='--', 
+    plt.plot(umbrales_prueba, sensibilidad_list, 'o-', label='Sensibilidad', linewidth=2, markersize=2)
+    plt.plot(umbrales_prueba, especificidad_list, 'o-', label='Especificidad', linewidth=2, markersize=2)
+    plt.plot(umbrales_prueba, f1_scores_list, 'o-', label='F1-Score', linewidth=3, markersize=3)
+    plt.axvline(optimal_threshold, color='red', linestyle='--', linewidth=2,
                 label=f'Umbral seleccionado\n{optimal_threshold:.3f}')
     plt.xlabel('Umbral')
     plt.ylabel('Valor de Métrica')
-    plt.title('Métricas por Umbral - Random Forest')
+    plt.title('Métricas por Umbral')
     plt.legend()
     plt.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
   
-    # 9. Retornar resultados completos
+    
     return {
         'modelo': model,
-        'X_train': X_train,
-        'X_test': X_test,
-        'y_train': y_train,
+        'metricas': {
+            'accuracy': accuracy_final,
+            'precision': precision_final,
+            'recall': recall_final,
+            'f1_score': max_f1,
+            'auc_score': auc_score,
+            'sensibilidad': sensibilidad,
+            'especificidad': especificidad,
+            'umbral_used': optimal_threshold
+        },
         'y_test': y_test,
-        'y_pred_final': y_pred_final,
-        'y_pred_proba': y_pred_proba,
-        'accuracy_final': accuracy_final,
-        'precision_final': precision_final,
-        'recall_final': recall_final,
-        'f1_score': max_f1,
-        'auc_score': auc_score,
-        'optimal_threshold': optimal_threshold,
-        'sensibilidad': sensibilidad,
-        'especificidad': especificidad,
-        'importancia_df': importancia_df,
-        'feature_names': feature_cols
+        'y_pred': y_pred_final,
+        'y_pred_proba': y_pred_proba
     }
 
 # Función principal 
@@ -199,7 +173,6 @@ if __name__ == "__main__":
     from data_loader import main_data  
     df_cleveland = main_data()
     
-    # Clasificación binaria: sin enfermedad (0) vs con enfermedad (1-4)
     resultados_rf = RandomForestClasificacion(
         df_cleveland, 
         target_col='num', 

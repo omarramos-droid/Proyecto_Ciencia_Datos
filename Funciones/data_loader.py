@@ -1,3 +1,4 @@
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -52,7 +53,7 @@ def load_cleveland_data():
     df = pd.DataFrame(registros, columns=column_names)
     df['dataset'] = 'cleveland'
     
-    print(f"{len(df)} registros cargados exitosamente")
+    print(f"{len(df)} registros cargados ")
     return df
 def filter_data_quality(df):
     """
@@ -258,3 +259,4 @@ def visualizar_outliers(df):
 # Función principal 
 if __name__ == "__main__":
     df_cleveland = main_data()
+    # print( df_cleveland.columns)

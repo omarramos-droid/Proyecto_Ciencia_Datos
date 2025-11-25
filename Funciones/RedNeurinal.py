@@ -7,41 +7,44 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score, precision_recall_curve
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
-def optimizar_umbral_inteligente(y_test, y_pred_proba):
+def optimizar_umbral(y_test, y_pred_proba):
     """
     Optimiza el umbral de clasificación para maximizar el F1-Score
     """
-    precisions, recalls, thresholds = precision_recall_curve(y_test, y_pred_proba)
-    f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-8)
+    umbrales = np.linspace(0.1, 0.9, 100)
+    mejores_metricas = {
+        'umbral': 0.5,
+        'f1': 0,
+        'precision': 0,
+        'recall': 0
+    }
     
-    max_f1 = np.max(f1_scores)
-    optimal_indices = np.where(f1_scores == max_f1)[0]
-    
-    best_idx = optimal_indices[0]
-    optimal_threshold = thresholds[best_idx]
-    
-    return optimal_threshold, max_f1
-
-def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
-    """
-    Red Neuronal para clasificación binaria con 2 salidas
-    
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        Dataset completo con variables predictoras y variable objetivo
-    target_col : str, default='num'
-        Nombre de la columna objetivo
-    binary_threshold : int, default=0
-        Umbral para binarizar la variable objetivo
+    for umbral in umbrales:
+        y_pred_temp = (y_pred_proba >= umbral).astype(int)
+        precision_temp = precision_score(y_test, y_pred_temp, zero_division=0)
+        recall_temp = recall_score(y_test, y_pred_temp, zero_division=0)
+        f1_temp = f1_score(y_test, y_pred_temp)
         
-    Returns:
-    --------
-    dict : Diccionario con todos los resultados del modelo
+        if f1_temp > mejores_metricas['f1']:
+            mejores_metricas = {
+                'umbral': umbral,
+                'f1': f1_temp,
+                'precision': precision_temp,
+                'recall': recall_temp
+            }
+    
+    return mejores_metricas['umbral'], mejores_metricas['f1']
+
+
+def RedNeuronalClasificacionCompleja(df, target_col='num', binary_threshold=0):
+    """
+    Red Neuronal para clasificación binaria con optimización automática del umbral 
     """
     
-    # 1. Preparar datos para clasificación binaria
+    # 1. Binarizar la variable objetivo
     df_clean = df.copy()
     df_clean['target_binary'] = (df_clean[target_col] > binary_threshold).astype(int)
     
@@ -52,18 +55,16 @@ def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
     X = df_clean[feature_cols]
     y = df_clean['target_binary']
     
-    print(f" DISTRIBUCIÓN DE CLASES:")
-    print(f" Sin enfermedad (0): {(y == 0).sum()} casos")
-    print(f" Con enfermedad (1): {(y == 1).sum()} casos")
-    print(f" Proporción: {(y == 1).mean()*100:.1f}% con enfermedad")
+    print(f"📊 DISTRIBUCIÓN DE CLASES:")
+    print(f"   Clase 0 (sin enfermedad): {(y == 0).sum()} casos - {(y == 0).mean()*100:.1f}%")
+    print(f"   Clase 1 (con enfermedad): {(y == 1).sum()} casos - {(y == 1).mean()*100:.1f}%")
     
     # 2. Dividir datos
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
     
-    # 3. Escalar datos (CRÍTICO para redes neuronales)
-    from sklearn.preprocessing import StandardScaler
+    # 3. Escalar datos
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
@@ -72,21 +73,17 @@ def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
     input_dim = X_train_scaled.shape[1]
     
     model = Sequential([
-        # Capa de entrada
         Dense(64, activation='relu', input_shape=(input_dim,)),
         BatchNormalization(),
         Dropout(0.3),
         
-        # Capa oculta 1
         Dense(32, activation='relu'),
         Dropout(0.2),
         
-        # Capa oculta 2
         Dense(16, activation='relu'),
         Dropout(0.1),
         
-        # Capa de salida - 1 neurona con sigmoid para binaria
-        Dense(1, activation='sigmoid')  # 2 salidas implícitas: [prob_clase_0, prob_clase_1]
+        Dense(1, activation='sigmoid')
     ])
     
     # 5. Compilar modelo
@@ -96,81 +93,71 @@ def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
         metrics=['accuracy', 'Precision', 'Recall']
     )
     
-    print(f"\n🧠 ARQUITECTURA DE LA RED NEURONAL:")
-    print(f"   • Capa entrada: {input_dim} neuronas")
-    print(f"   • Capa oculta 1: 64 neuronas (ReLU)")
-    print(f"   • Capa oculta 2: 32 neuronas (ReLU)") 
-    print(f"   • Capa oculta 3: 16 neuronas (ReLU)")
-    print(f"   • Capa salida: 1 neurona (Sigmoid)")
-    print(f"   • Dropout: 30%/20%/10% para regularización")
+    print(f"\n ARQUITECTURA DE LA RED NEURONAL:")
+    print(f"   • Entrada: {input_dim} características")
+    print(f"   • Capas ocultas: 64 → 32 → 16 neuronas (ReLU)")
+    print(f"   • Salida: 1 neurona (Sigmoid)")
+    print(f"   • Optimización de umbral: ACTIVADA")
     
-    # 6. Callbacks
-    early_stop = EarlyStopping(
-        monitor='val_loss',
-        patience=20,
-        restore_best_weights=True,
-        verbose=1
-    )
+    # 6. Entrenar
+    early_stop = EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
     
-    # 7. Entrenar modelo
-    print(f"\n🚀 ENTRENANDO RED NEURONAL...")
     history = model.fit(
         X_train_scaled, y_train,
         validation_data=(X_test_scaled, y_test),
-        epochs=150,
-        batch_size=16,
-        callbacks=[early_stop],
-        verbose=1
+        epochs=150, batch_size=16,
+        callbacks=[early_stop], verbose=1
     )
     
-    # 8. Predicciones
+    # 7. Predicciones y optimización de umbral
     y_pred_proba = model.predict(X_test_scaled).flatten()
     
-    # 9. Optimizar umbral
-    optimal_threshold, max_f1 = optimizar_umbral_inteligente(y_test, y_pred_proba)
+    # Obtener umbral que maximiza F1
+    optimal_threshold, max_f1 = optimizar_umbral(y_test, y_pred_proba)
     
-    # Aplicar umbral recomendado
+  
+    
+   
+    # Aplicar umbral óptimo
     y_pred_final = (y_pred_proba >= optimal_threshold).astype(int)
     
-    # 10. Calcular métricas
+    # 8. Calcular métricas finales
     accuracy_final = accuracy_score(y_test, y_pred_final)
-    precision_final = precision_score(y_test, y_pred_final)
-    recall_final = recall_score(y_test, y_pred_final)
+    precision_final = precision_score(y_test, y_pred_final, zero_division=0)
+    recall_final = recall_score(y_test, y_pred_final, zero_division=0)
     auc_score_val = roc_auc_score(y_test, y_pred_proba)
     
-    # Matriz de confusión
     cm = confusion_matrix(y_test, y_pred_final)
     tn, fp, fn, tp = cm.ravel()
-    sensibilidad = recall_final
-    especificidad = tn / (tn + fp)
     
-    print(f"\n🧠 RESULTADOS RED NEURONAL:")
-    print(f"   • Épocas entrenadas: {len(history.history['loss'])}")
     print(f"   • Umbral óptimo: {optimal_threshold:.3f}")
     print(f"   • Accuracy:    {accuracy_final:.4f}")
-    print(f"   • Precision:   {precision_final:.4f}")
+    print(f"   • Precision:   {precision_final:.4f}") 
     print(f"   • Recall:      {recall_final:.4f}")
     print(f"   • F1-Score:    {max_f1:.4f}")
-    print(f"   • Sensibilidad: {sensibilidad:.4f}")
-    print(f"   • Especificidad: {especificidad:.4f}")
     print(f"   • AUC-ROC:     {auc_score_val:.4f}")
+    print(f"   • Sensibilidad: {recall_final:.4f}")
+    print(f"   • Especificidad: {tn/(tn+fp):.4f}")
     
-    # 11. Preparar datos para gráficos
-    umbrales_prueba = np.linspace(0.1, 0.9, 50)
+    # 9. Preparar datos para gráficos avanzados - 
+    umbrales_prueba = np.linspace(0.1, 0.9, 100)  
     sensibilidad_list = []
     especificidad_list = []
     f1_scores_list = []
+    precision_list = []
     
     for umbral in umbrales_prueba:
         y_pred_temp = (y_pred_proba >= umbral).astype(int)
         cm_temp = confusion_matrix(y_test, y_pred_temp)
         tn_temp, fp_temp, fn_temp, tp_temp = cm_temp.ravel()
         
-        sensibilidad_list.append(tp_temp / (tp_temp + fn_temp))
-        especificidad_list.append(tn_temp / (tn_temp + fp_temp))
+        sensibilidad_list.append(tp_temp / (tp_temp + fn_temp) if (tp_temp + fn_temp) > 0 else 0)
+        especificidad_list.append(tn_temp / (tn_temp + fp_temp) if (tn_temp + fp_temp) > 0 else 0)
         f1_scores_list.append(f1_score(y_test, y_pred_temp))
+        precision_list.append(precision_score(y_test, y_pred_temp, zero_division=0))
     
-    # 12. Visualizaciones
+
+ # 10. Visualizaciones completas
     plt.figure(figsize=(15, 10))
     
     # Gráfico 1: Matriz de confusión
@@ -178,7 +165,7 @@ def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=['Sin Enfermedad', 'Con Enfermedad'],
                 yticklabels=['Sin Enfermedad', 'Con Enfermedad'])
-    plt.title(f'Matriz de Confusión - Red Neuronal\n(Umbral: {optimal_threshold:.3f})')
+    plt.title(f'Matriz de Confusión\n(Umbral óptimo: {optimal_threshold:.3f})')
     plt.ylabel('Valor Real')
     plt.xlabel('Predicción')
     
@@ -188,10 +175,10 @@ def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
     plt.plot(umbrales_prueba, especificidad_list, 'o-', label='Especificidad', linewidth=2, markersize=3)
     plt.plot(umbrales_prueba, f1_scores_list, 'o-', label='F1-Score', linewidth=2, markersize=3)
     plt.axvline(optimal_threshold, color='red', linestyle='--', 
-                label=f'Umbral seleccionado\n{optimal_threshold:.3f}')
+                label=f'Umbral óptimo\n{optimal_threshold:.3f}')
     plt.xlabel('Umbral')
     plt.ylabel('Valor de Métrica')
-    plt.title('Métricas por Umbral - Red Neuronal')
+    plt.title('Métricas por Umbral')
     plt.legend()
     plt.grid(True, alpha=0.3)
     
@@ -201,7 +188,7 @@ def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
     plt.plot(history.history['val_loss'], label='Pérdida Validación')
     plt.xlabel('Época')
     plt.ylabel('Pérdida')
-    plt.title('Evolución de la Pérdida durante Entrenamiento')
+    plt.title('Evolución de la Pérdida')
     plt.legend()
     plt.grid(True, alpha=0.3)
     
@@ -211,41 +198,43 @@ def RedNeuronalClasificacion(df, target_col='num', binary_threshold=0):
     plt.plot(history.history['val_accuracy'], label='Precisión Validación')
     plt.xlabel('Época')
     plt.ylabel('Precisión')
-    plt.title('Evolución de la Precisión durante Entrenamiento')
+    plt.title('Evolución de la Precisión')
     plt.legend()
     plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.show()
     
-    # 13. Retornar resultados completos
     return {
         'modelo': model,
         'scaler': scaler,
-        'history': history,
-        'X_train': X_train,
-        'X_test': X_test,
-        'y_train': y_train,
-        'y_test': y_test,
-        'y_pred_final': y_pred_final,
-        'y_pred_proba': y_pred_proba,
-        'accuracy_final': accuracy_final,
-        'precision_final': precision_final,
-        'recall_final': recall_final,
-        'f1_score': max_f1,
-        'auc_score': auc_score_val,
         'optimal_threshold': optimal_threshold,
-        'sensibilidad': sensibilidad,
-        'especificidad': especificidad,
-        'feature_names': feature_cols
+        'metricas': {
+            'accuracy': accuracy_final,
+            'precision': precision_final,
+            'recall': recall_final,
+            'f1': max_f1,
+            'auc': auc_score_val
+        },
+        'y_pred_proba': y_pred_proba,
+        'y_pred_final': y_pred_final,
+        'tipo': 'compleja',
+        'umbrales_grafica': umbrales_prueba,
+        'f1_scores_grafica': f1_scores_list
     }
+
 
 # Función principal 
 if __name__ == "__main__":
-    from data_loader import main_data  
-    from sklearn.model_selection import train_test_split
+    from data_loader import main_data
     
     df_cleveland = main_data()
     
-    # Clasificación binaria: sin enfermedad (0) vs con enfermedad (1-4)
-    resultados_nn = RedNeuronalClasificacion(df_cleveland, target_col='num', binary_threshold=0)
+
+    
+    # Versión Compleja
+    resultados_compleja = RedNeuronalClasificacionCompleja(
+        df_cleveland, 
+        target_col='num', 
+        binary_threshold=0
+    )
