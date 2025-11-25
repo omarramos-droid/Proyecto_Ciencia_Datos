@@ -59,6 +59,18 @@ def RegresionLogistica(df, target_col='num', binary_threshold=0):
     model = LogisticRegression(random_state=42, max_iter=1000, class_weight='balanced')
     model.fit(X_train_scaled, y_train)
     
+    w = model.coef_[0]  # coeficientes beta
+
+    importancia_df = pd.DataFrame({
+    'Variable': feature_cols,
+    'Coeficiente_Beta': w,
+    'Odds_Ratio (exp(Beta))': np.exp(w),
+    'Importancia_Abs': np.abs(w)
+    }).sort_values('Importancia_Abs', ascending=False)
+
+    print("\n  Importancia de Variables :")
+    print(importancia_df.head(3).to_string(index=False))
+    
     # 4. Predicciones y métricas base
     y_pred_proba = model.predict_proba(X_test_scaled)[:, 1]
     auc_score = roc_auc_score(y_test, y_pred_proba)
