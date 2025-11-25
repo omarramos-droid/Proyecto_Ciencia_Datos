@@ -80,6 +80,18 @@ def RandomForestClasificacion(df, target_col='num', binary_threshold=0, n_estima
     y_pred_proba = model.predict_proba(X_test)[:, 1]
     y_pred_default = model.predict(X_test)  # Predicción con umbral 0.5
     
+    # 4. Importancia de variables (Random Forest)
+    importancias = model.feature_importances_
+
+    importancia_df = pd.DataFrame({
+    'Variable': feature_cols,
+    'Importancia_RF': importancias
+    }).sort_values('Importancia_RF', ascending=False)
+
+    print("\n  Importancia de Variables (Random Forest):")
+    print(importancia_df.head(5).to_string(index=False))
+
+    
     # 5. Evaluar diferentes umbrales
     optimal_threshold, max_f1 = evaluar_umbrales_random_forest(y_test, y_pred_proba)
     
