@@ -1,6 +1,6 @@
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
+from sklearn.metrics import silhouette_score
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -8,65 +8,25 @@ import numpy as np
 import pandas as pd
 
 def grafica_metodo_codo(X_scaled, max_k=8):
-    """
-    Genera la gráfica del método del codo para determinar K óptimo
-    """
-    inercia = []
-    k_range = range(1, max_k + 1)
-    
-    for k in k_range:
+    """Genera la gráfica del método del codo"""
+    Values = []
+    for k in range(1, max_k + 1):
         kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
         kmeans.fit(X_scaled)
-        inercia.append(kmeans.inertia_)
+        Values.append(kmeans.inertia_)
     
     plt.figure(figsize=(10, 6))
-    plt.plot(k_range, inercia, 'bo-', linewidth=2, markersize=8, markerfacecolor='red')
+    plt.plot(range(1, max_k + 1), Values, 'bo-', linewidth=2, markersize=8)
     plt.xlabel('Número de Clusters (K)')
-    plt.ylabel('Inercia (Within-Cluster Sum of Squares)')
+    plt.ylabel('Inercia')
     plt.title('Método del Codo para Determinar K Óptimo')
     plt.grid(True, alpha=0.3)
-    
-    # Destacar todos los K que vamos a evaluar
-    for k in [2, 3, 4, 5]:
-        plt.axvline(x=k, color=['green', 'orange', 'blue', 'purple'][k-2], 
-                   linestyle='--', alpha=0.7, label=f'K={k}')
-    plt.legend()
-    
     plt.show()
     
-    return inercia
-
-def calcular_metricas_clustering(X_scaled, cluster_labels, y_true=None):
-    """
-    Calcula todas las métricas de evaluación del clustering
-    """
-    metrics = {
-        'silhouette': silhouette_score(X_scaled, cluster_labels)
-    }
-    
-    # Métricas de sensibilidad si tenemos etiquetas reales
-    if y_true is not None:
-        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-        
-        # Para clustering vs clasificación, necesitamos mapear clusters a clases
-        # Usamos la clase mayoritaria en cada cluster
-        df_temp = pd.DataFrame({'cluster': cluster_labels, 'true': y_true})
-        cluster_to_class = df_temp.groupby('cluster')['true'].agg(lambda x: x.value_counts().index[0]).to_dict()
-        y_pred = [cluster_to_class[c] for c in cluster_labels]
-        
-        metrics.update({
-            'accuracy': accuracy_score(y_true, y_pred),
-            'precision': precision_score(y_true, y_pred, average='weighted'),
-            'recall': recall_score(y_true, y_pred, average='weighted'),
-            'f1_score': f1_score(y_true, y_pred, average='weighted')
-        })
-    
-    return metrics
+    return Values
 
 def evaluar_clusters_varios(df, target_col='num', ks=[2, 3, 4, 5]):
-    """
-    Evalúa métricas de clustering para varios valores de K
-    """
+    """Evalúa clustering para varios valores de K"""
     # Preparar datos
     df_clean = df.copy()
     df_clean['target_binary'] = (df_clean[target_col] > 0).astype(int)
@@ -82,7 +42,7 @@ def evaluar_clusters_varios(df, target_col='num', ks=[2, 3, 4, 5]):
     X_scaled = scaler.fit_transform(X)
     
     # 1. Gráfica del método del codo
-    inercia = grafica_metodo_codo(X_scaled, max_k=8)
+    grafica_metodo_codo(X_scaled, max_k=8)
     
     resultados = {}
     todos_labels = {}
@@ -93,9 +53,8 @@ def evaluar_clusters_varios(df, target_col='num', ks=[2, 3, 4, 5]):
         labels = kmeans.fit_predict(X_scaled)
         todos_labels[k] = labels
         
-        # Calcular métricas
-        metrics = calcular_metricas_clustering(X_scaled, labels, y)
-        resultados[k] = metrics
+        # Calcular métricas básicas
+        silhouette = silhouette_score(X_scaled, labels)
         
         # Distribución por enfermedad
         distribucion = []
@@ -111,48 +70,93 @@ def evaluar_clusters_varios(df, target_col='num', ks=[2, 3, 4, 5]):
                 'tasa_enfermedad': tasa_enfermedad
             })
         
-        resultados[k]['distribucion'] = distribucion
+        resultados[k] = {
+            'silhouette': silhouette,
+            'distribucion': distribucion
+        }
     
-    # 3. Mostrar tabla comparativa completa SIN columna "Mejor K"
- 
-    print(f"{'Métrica':<20} {'K=2':<12} {'K=3':<12} {'K=4':<12} {'K=5':<12}")
-   
-    
-    # Métricas a comparar
-    metricas_comparar = {
-        'Silhouette Score': 'silhouette',
-        'Accuracy': 'accuracy',
-        'Precision': 'precision',
-        'Recall': 'recall',
-        'F1-Score': 'f1_score'
-    }
-    
-    for nombre_metrica, clave_metrica in metricas_comparar.items():
-        if clave_metrica in resultados[2]:  # Verificar que la métrica existe
-            valores = [resultados[k][clave_metrica] for k in ks]
-            
-            # Mostrar fila
-            if nombre_metrica in ['Silhouette Score', 'Accuracy', 'Precision', 'Recall', 'F1-Score']:
-                print(f"{nombre_metrica:<20} {valores[0]:<12.4f} {valores[1]:<12.4f} {valores[2]:<12.4f} {valores[3]:<12.4f}")
-            else:
-                print(f"{nombre_metrica:<20} {valores[0]:<12.2f} {valores[1]:<12.2f} {valores[2]:<12.2f} {valores[3]:<12.2f}")
-    
-    print("-" * 70)
-    
-    # 4. Análisis de distribución por enfermedad
+    # 3. Mostrar tabla comparativa simplificada
+
+    print(f"{'K':<6} {'Silhouette':<12} {'Distribución'}")
     
     for k in ks:
-        print(f"\nK = {k}:")
-        for cluster_info in resultados[k]['distribucion']:
-            print(f"  Cluster {cluster_info['cluster']}: {cluster_info['total']} casos, "
-                  f"{cluster_info['tasa_enfermedad']:.1f}% con enfermedad")
+        dist_str = ", ".join([f"C{i}: {d['total']}({d['tasa_enfermedad']:.1f}%)" 
+                            for i, d in enumerate(resultados[k]['distribucion'])])
+        print(f"{k:<6} {resultados[k]['silhouette']:<12.4f} {dist_str}")
     
     return {
         'resultados': resultados,
         'todos_labels': todos_labels,
         'X_scaled': X_scaled,
-        'feature_names': feature_cols
+        'feature_names': feature_cols,
+        'y_true': y
     }
+
+def analizar_gravedad_por_cluster(df_clean, labels_k3, target_col='num'):
+    """Analiza distribución de gravedad por cluster"""
+    df_analysis = df_clean.copy()
+    df_analysis['cluster'] = labels_k3
+    
+    print("\n Gravedad de casos para (K=3)")
+    
+    for cluster_id in range(3):
+        cluster_data = df_analysis[df_analysis['cluster'] == cluster_id]
+        total = len(cluster_data)
+        
+        print(f"\n CLUSTER {cluster_id} ({total} casos):")
+        for severity in [0, 1, 2, 3, 4]:
+            count = (cluster_data[target_col] == severity).sum()
+            percentage = (count / total) * 100
+            
+            if severity == 0:
+                label = "Sano"
+            elif severity == 1:
+                label = "Leve"
+            elif severity == 2:
+                label = "Moderado"
+            else:
+                label = "Severo"
+                
+            print(f"   {label}: {count} casos ({percentage:.1f}%)")
+
+def analizar_caracteristicas_clusters(df_clean, labels_k3, feature_cols):
+    """Analiza características distintivas por cluster"""
+    df_analysis = df_clean.copy()
+    df_analysis['cluster'] = labels_k3
+    
+
+    
+    # Estadísticas por cluster
+    stats_by_cluster = {}
+    global_means = df_analysis[feature_cols].mean()
+    
+    for cluster_id in range(3):
+        cluster_data = df_analysis[df_analysis['cluster'] == cluster_id]
+        stats_by_cluster[cluster_id] = cluster_data[feature_cols].mean()
+    
+    # Identificar variables más distintivas
+
+    
+    for cluster_id in range(3):
+        diferencias = []
+        for variable in feature_cols:
+            cluster_mean = stats_by_cluster[cluster_id][variable]
+            global_mean = global_means[variable]
+            diferencia_pct = ((cluster_mean - global_mean) / global_mean) * 100
+            
+            if abs(diferencia_pct) > 20:  # Diferencia significativa
+                direccion = "↑" if diferencia_pct > 0 else "↓"
+                diferencias.append((variable, diferencia_pct, direccion))
+        
+        # Ordenar por diferencia absoluta
+        diferencias.sort(key=lambda x: abs(x[1]), reverse=True)
+        
+        print(f"\n  CLUSTER {cluster_id}:")
+        if diferencias:
+            for var, diff_pct, dir in diferencias[:5]:  # Top 5
+                print(f"   {dir} {var}: {diff_pct:+.1f}%")
+        else:
+            print("   Sin variables muy distintivas")
 
 def plotear(X_scaled, labels_2, labels_3, labels_4):
     """
@@ -215,14 +219,17 @@ def plotear(X_scaled, labels_2, labels_3, labels_4):
     plt.tight_layout()
     plt.show()
 
-# Cómo usar la función en tu código principal:
 if __name__ == "__main__":
     from data_loader import main_data
+    
     
     # Cargar datos
     df_cleveland = main_data()
     
-    # Evaluar clusters para K=2,3,4,5
+    # Evaluar clusters
+    resultados = evaluar_clusters_varios(df_cleveland)
+    
+  # Evaluar clusters para K=2,3,4,5
     resultados_evaluacion = evaluar_clusters_varios(df_cleveland)
     
     # Plotear comparación 
@@ -232,3 +239,11 @@ if __name__ == "__main__":
        resultados_evaluacion['todos_labels'][3],
        resultados_evaluacion['todos_labels'][4]
    )
+      
+    # Análisis de gravedad
+    df_clean = df_cleveland.copy()
+    analizar_gravedad_por_cluster(df_clean, resultados['todos_labels'][3])
+    
+    # Análisis de características
+    analizar_caracteristicas_clusters(df_clean, resultados['todos_labels'][3], resultados['feature_names'])
+    

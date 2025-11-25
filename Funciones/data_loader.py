@@ -253,9 +253,9 @@ def visualizar_outliers(df):
     plt.tight_layout()
     plt.show()
 
-# data=main_data()
+data=main_data()
 
-# visualizar_outliers(data)
+visualizar_outliers(data)
 # Función principal 
 if __name__ == "__main__":
     df_cleveland = main_data()

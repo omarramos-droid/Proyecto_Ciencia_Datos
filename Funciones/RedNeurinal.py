@@ -55,13 +55,12 @@ def RedNeuronalClasificacionCompleja(df, target_col='num', binary_threshold=0):
     X = df_clean[feature_cols]
     y = df_clean['target_binary']
     
-    print(f"📊 DISTRIBUCIÓN DE CLASES:")
     print(f"   Clase 0 (sin enfermedad): {(y == 0).sum()} casos - {(y == 0).mean()*100:.1f}%")
     print(f"   Clase 1 (con enfermedad): {(y == 1).sum()} casos - {(y == 1).mean()*100:.1f}%")
     
     # 2. Dividir datos
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X, y, test_size=0.2, random_state=13, stratify=y
     )
     
     # 3. Escalar datos
@@ -69,35 +68,44 @@ def RedNeuronalClasificacionCompleja(df, target_col='num', binary_threshold=0):
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     
-    # 4. Construir red neuronal
+   # 4. Construir red neuronal con más capas
     input_dim = X_train_scaled.shape[1]
+
+    model = Sequential([    
+    Dense(64, activation='relu', input_shape=(input_dim,)),
+    BatchNormalization(),
+    Dropout(0.3),
     
-    model = Sequential([
-        Dense(64, activation='relu', input_shape=(input_dim,)),
-        BatchNormalization(),
-        Dropout(0.3),
-        
-        Dense(32, activation='relu'),
-        Dropout(0.2),
-        
-        Dense(16, activation='relu'),
-        Dropout(0.1),
-        
-        Dense(1, activation='sigmoid')
-    ])
+    Dense(128, activation='relu'),  # Capa adicional
+    BatchNormalization(),
+    Dropout(0.3),
     
-    # 5. Compilar modelo
+    Dense(128, activation='relu'),
+    BatchNormalization(),
+    Dropout(0.25),
+    
+    Dense(64, activation='relu'),   # Capa adicional
+    BatchNormalization(),
+    Dropout(0.2),
+    
+    Dense(32, activation='relu'),   # Capa adicional
+    BatchNormalization(),
+    Dropout(0.15),
+    
+    Dense(8, activation='relu'),    # Capa adicional 
+    Dropout(0.1),
+    
+    Dense(1, activation='sigmoid')
+])
+
+# 5. Compilar modelo (manteniendo tu configuración)
     model.compile(
-        optimizer=Adam(learning_rate=0.001),
-        loss='binary_crossentropy',
-        metrics=['accuracy', 'Precision', 'Recall']
+    optimizer=Adam(learning_rate=0.001),
+    loss='binary_crossentropy',
+    metrics=['accuracy', 'Precision', 'Recall']
     )
     
-    print(f"\n ARQUITECTURA DE LA RED NEURONAL:")
-    print(f"   • Entrada: {input_dim} características")
-    print(f"   • Capas ocultas: 64 → 32 → 16 neuronas (ReLU)")
-    print(f"   • Salida: 1 neurona (Sigmoid)")
-    print(f"   • Optimización de umbral: ACTIVADA")
+ 
     
     # 6. Entrenar
     early_stop = EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
@@ -105,7 +113,8 @@ def RedNeuronalClasificacionCompleja(df, target_col='num', binary_threshold=0):
     history = model.fit(
         X_train_scaled, y_train,
         validation_data=(X_test_scaled, y_test),
-        epochs=150, batch_size=16,
+        epochs=500, 
+        batch_size=10,
         callbacks=[early_stop], verbose=1
     )
     
